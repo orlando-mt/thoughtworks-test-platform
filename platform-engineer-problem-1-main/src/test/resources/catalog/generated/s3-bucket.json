@@ -1,0 +1,383 @@
+{
+  "header": "",
+  "footer": "",
+  "inputs": [
+    {
+      "name": "allowed_vpc_endpoint_ids",
+      "type": "list(string)",
+      "description": "When set, every request must arrive through one of these VPC endpoints. Makes the bucket unreachable from the internet even with valid credentials",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "block_public_access",
+      "type": "bool",
+      "description": "Block all forms of public access. Leave true and serve public content through CloudFront",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "bucket_key_enabled",
+      "type": "bool",
+      "description": "Enable S3 Bucket Keys with SSE-KMS, which cuts KMS request costs on read-heavy buckets",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "bucket_name",
+      "type": "string",
+      "description": "Name of the bucket. Must be globally unique",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "cloudfront_distribution_arn",
+      "type": "string",
+      "description": "ARN of a CloudFront distribution granted read access through Origin Access Control",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "cors_rules",
+      "type": "list(object({\n    allowed_methods = list(string)\n    allowed_origins = list(string)\n    allowed_headers = optional(list(string))\n    expose_headers  = optional(list(string))\n    max_age_seconds = optional(number)\n  }))",
+      "description": "CORS rules, needed when a browser calls the bucket directly",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "force_destroy",
+      "type": "bool",
+      "description": "Allow destroying a bucket that still contains objects. Keep false for anything holding real data",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "kms_key_arn",
+      "type": "string",
+      "description": "KMS key ARN for SSE-KMS. When null, SSE-S3 (AES256) is used",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "lambda_notifications",
+      "type": "map(object({\n    arn           = string\n    events        = list(string)\n    filter_prefix = optional(string)\n    filter_suffix = optional(string)\n  }))",
+      "description": "Event notifications to Lambda functions, keyed by notification id",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "lifecycle_rules",
+      "type": "list(object({\n    id      = string\n    enabled = optional(bool, true)\n    prefix  = optional(string)\n    transitions = optional(list(object({\n      days          = number\n      storage_class = string\n    })), [])\n    expiration_days = optional(number)\n    noncurrent_version_transitions = optional(list(object({\n      days          = number\n      storage_class = string\n    })), [])\n    noncurrent_version_expiration_days     = optional(number)\n    abort_incomplete_multipart_upload_days = optional(number, 7)\n  }))",
+      "description": "Lifecycle rules. Each entry supports:\n  - id (required) and enabled (optional, true)\n  - prefix (optional): scope the rule to a key prefix\n  - transitions / noncurrent_version_transitions: lists of\n    { days, storage_class }\n  - expiration_days / noncurrent_version_expiration_days\n  - abort_incomplete_multipart_upload_days: cleans up failed uploads,\n    which are billed but invisible in the console\n",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "logging_target_bucket",
+      "type": "string",
+      "description": "Bucket receiving access logs. Must be a different bucket",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "logging_target_prefix",
+      "type": "string",
+      "description": "Prefix for the access logs (defaults to \u003cbucket_name\u003e/)",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "object_lock_mode",
+      "type": "string",
+      "description": "Object Lock retention mode: GOVERNANCE, COMPLIANCE, or null to disable. Can only be set when the bucket is created",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "object_lock_retention_days",
+      "type": "number",
+      "description": "Default retention period in days when Object Lock is enabled",
+      "default": 30,
+      "required": false
+    },
+    {
+      "name": "object_ownership",
+      "type": "string",
+      "description": "Object ownership: BucketOwnerEnforced disables ACLs entirely (recommended)",
+      "default": "BucketOwnerEnforced",
+      "required": false
+    },
+    {
+      "name": "policy_statements",
+      "type": "list(object({\n    sid       = optional(string)\n    effect    = optional(string, \"Allow\")\n    actions   = list(string)\n    resources = optional(list(string))\n    principals = optional(list(object({\n      type        = string\n      identifiers = list(string)\n    })), [])\n    conditions = optional(list(object({\n      test     = string\n      variable = string\n      values   = list(string)\n    })), [])\n  }))",
+      "description": "Additional bucket policy statements",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "replication_role_name",
+      "type": "string",
+      "description": "Name of the replication IAM role (defaults to \u003cbucket_name\u003e-replication)",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "replication_rules",
+      "type": "list(object({\n    id                        = string\n    destination_bucket_arn    = string\n    enabled                   = optional(bool, true)\n    prefix                    = optional(string)\n    destination_storage_class = optional(string, \"STANDARD\")\n    destination_kms_key_arn   = optional(string)\n    destination_account_id    = optional(string)\n    replication_time_minutes  = optional(number)\n    replicate_delete_markers  = optional(bool, false)\n  }))",
+      "description": "Cross-region (or cross-account) replication rules. Requires versioning on\nboth source and destination buckets. Each entry supports:\n  - id (required) and enabled (optional, true)\n  - destination_bucket_arn (required)\n  - prefix (optional): replicate only this key prefix\n  - destination_storage_class (optional, STANDARD)\n  - destination_kms_key_arn (optional): key for the replica\n  - destination_account_id (optional): cross-account destination; sets\n    ownership override so the destination account owns the replicas\n  - replication_time_minutes (optional): enables S3 Replication Time\n    Control with this SLA, which is billed extra\n  - replicate_delete_markers (optional, false)\n",
+      "default": [],
+      "required": false
+    },
+    {
+      "name": "sns_notifications",
+      "type": "map(object({\n    arn           = string\n    events        = list(string)\n    filter_prefix = optional(string)\n    filter_suffix = optional(string)\n  }))",
+      "description": "Event notifications to SNS topics, keyed by notification id",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "sqs_notifications",
+      "type": "map(object({\n    arn           = string\n    events        = list(string)\n    filter_prefix = optional(string)\n    filter_suffix = optional(string)\n  }))",
+      "description": "Event notifications to SQS queues, keyed by notification id",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "tags",
+      "type": "map(string)",
+      "description": "Tags applied to the bucket",
+      "default": {},
+      "required": false
+    },
+    {
+      "name": "versioning_enabled",
+      "type": "bool",
+      "description": "Enable object versioning, which protects against overwrites and deletions. Required for replication and Object Lock",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "website_enabled",
+      "type": "bool",
+      "description": "Enable the S3 website endpoint. HTTP only, no TLS: prefer CloudFront with OAC for production sites",
+      "default": false,
+      "required": false
+    },
+    {
+      "name": "website_error_document",
+      "type": "string",
+      "description": "Error document for the website endpoint",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "website_index_document",
+      "type": "string",
+      "description": "Index document for the website endpoint",
+      "default": "index.html",
+      "required": false
+    }
+  ],
+  "modules": [],
+  "outputs": [
+    {
+      "name": "bucket_arn",
+      "description": "ARN of the bucket"
+    },
+    {
+      "name": "bucket_domain_name",
+      "description": "Global domain name of the bucket"
+    },
+    {
+      "name": "bucket_id",
+      "description": "Name of the bucket"
+    },
+    {
+      "name": "bucket_region",
+      "description": "Region the bucket lives in"
+    },
+    {
+      "name": "bucket_regional_domain_name",
+      "description": "Regional domain name, used as the CloudFront origin"
+    },
+    {
+      "name": "hosted_zone_id",
+      "description": "Route53 hosted zone ID of the bucket's region"
+    },
+    {
+      "name": "replication_role_arn",
+      "description": "ARN of the replication role (null when replication is not configured)"
+    },
+    {
+      "name": "website_domain",
+      "description": "Domain of the website endpoint, for Route53 alias records"
+    },
+    {
+      "name": "website_endpoint",
+      "description": "S3 website endpoint (null when the website configuration is disabled)"
+    }
+  ],
+  "providers": [
+    {
+      "name": "aws",
+      "alias": null,
+      "version": "\u003e= 5.0"
+    }
+  ],
+  "requirements": [
+    {
+      "name": "terraform",
+      "version": "\u003e= 1.9.0"
+    },
+    {
+      "name": "aws",
+      "version": "\u003e= 5.0"
+    }
+  ],
+  "resources": [
+    {
+      "type": "iam_role",
+      "name": "replication",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "iam_role_policy",
+      "name": "replication",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_cors_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_lifecycle_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_logging",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_notification",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_object_lock_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_ownership_controls",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_policy",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_public_access_block",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_replication_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_server_side_encryption_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_versioning",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "s3_bucket_website_configuration",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "managed",
+      "version": "latest",
+      "description": null
+    },
+    {
+      "type": "iam_policy_document",
+      "name": "this",
+      "provider": "aws",
+      "source": "hashicorp/aws",
+      "mode": "data",
+      "version": "latest",
+      "description": null
+    }
+  ]
+}

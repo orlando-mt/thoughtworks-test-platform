@@ -1,0 +1,30 @@
+# Módulos publicados en la plataforma. Agregar uno = un PR a este archivo.
+# Tipo, descripción y default de cada variable NO se escriben aquí:
+# el workflow los extrae del módulo con terraform-docs (carpeta generated/).
+modules:
+  - id: s3-bucket
+    display_name: S3 bucket
+    description: >-
+      Private S3 bucket, encrypted, with public access blocked and versioning.
+      Use it to store files such as reports, exports or backups.
+    source: github.com/orlando-mt/terraform-aws-s3
+    version: v1.0.0
+
+    # La plataforma arma el nombre real: <proyecto>-<entorno>-<nombre>-<sufijo>
+    name_variable: bucket_name
+    # La plataforma inyecta sus etiquetas obligatorias en esta variable
+    tags_variable: tags
+
+    # Lo único que se le pregunta al usuario
+    ask:
+      - versioning_enabled
+
+    # Lo que la plataforma impone; el usuario no lo puede cambiar
+    fixed:
+      block_public_access: true
+      force_destroy: false
+
+    # Outputs que se le muestran al usuario cuando el recurso queda listo
+    outputs:
+      - bucket_id
+      - bucket_arn

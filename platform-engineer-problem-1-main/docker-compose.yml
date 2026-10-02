@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: acme-pg
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: acme-api
+    env_file: .env            # se pasan como variables de entorno, igual que ECS
+    environment:
+      DB_HOST: postgres       # dentro de la red de Compose, la base se llama "postgres"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
