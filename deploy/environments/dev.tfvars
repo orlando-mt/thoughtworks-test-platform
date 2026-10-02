@@ -1,0 +1,6 @@
+name_prefix                = "thoughtworks-test"
+environment                = "dev"
+state_bucket               = "kordanix-platform-tfstate"
+github_org                 = "kordanix-io"
+github_app_id              = "5142834"
+github_app_installation_id = "166697397"

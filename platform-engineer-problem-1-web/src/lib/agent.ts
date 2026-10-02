@@ -3,7 +3,12 @@ import { platform, type ApiResult, type ModuleDetail } from "@/lib/platform";
 
 export type Step = { tool: string; label: string; detail: string; ok: boolean };
 
-const client = new Anthropic(); // lee ANTHROPIC_API_KEY del entorno del servidor
+let anthropic: Anthropic | undefined;
+function client(): Anthropic {
+    anthropic ??= new Anthropic(); // lee ANTHROPIC_API_KEY del entorno del servidor
+    return anthropic;
+}
+
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 const MAX_TURNS = 8;
 
@@ -173,7 +178,7 @@ export async function runAgent(
     const texts: string[] = [];
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
-        const response = await client.messages.create({
+        const response = await client().messages.create({
             model: MODEL,
             max_tokens: 1024,
             system: systemPrompt(module),

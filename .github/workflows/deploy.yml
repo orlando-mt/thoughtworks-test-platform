@@ -1,0 +1,142 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform-engineer-problem-1-main/**"
+      - "platform-engineer-problem-1-web/**"
+      - "deploy/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to run
+        required: true
+        type: choice
+        default: deploy
+        options: [deploy, destroy]
+      confirm_destroy:
+        description: To destroy, type the environment name (dev)
+        required: false
+        type: string
+
+permissions:
+  id-token: write # OIDC hacia AWS, sin llaves guardadas
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::770725602805:role/thoughtworks-test-infra-deployer
+  ENVIRONMENT: dev
+  NAME: thoughtworks-test-dev
+  IMAGE_TAG: ${{ github.sha }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  ACTION: ${{ github.event_name == 'push' && 'deploy' || inputs.action }}
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ github.event_name == 'push' && 'deploy' || inputs.action }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm destroy
+        if: env.ACTION == 'destroy'
+        env:
+          CONFIRM: ${{ inputs.confirm_destroy }}
+        run: |
+          if [ "$CONFIRM" != "$ENVIRONMENT" ]; then
+            echo "::error::To destroy, type '${ENVIRONMENT}' in the confirm_destroy field."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+
+      # --- Pruebas de la API: si fallan, no se construye ni se despliega ---
+      - uses: actions/setup-java@v5
+        if: env.ACTION == 'deploy'
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Test API
+        if: env.ACTION == 'deploy'
+        working-directory: platform-engineer-problem-1-main
+        run: |
+          sed -i 's/\r$//' mvnw && chmod +x mvnw
+          ./mvnw -B -q verify
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --- Imágenes: una por servicio, etiquetadas con el SHA del commit ---
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+        if: env.ACTION == 'deploy'
+
+      - name: Build and push images
+        if: env.ACTION == 'deploy'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          build() {
+            local repository="${NAME}-$1"
+            local image="${REGISTRY}/${repository}:${IMAGE_TAG}"
+            # Las etiquetas del repo son inmutables: si la imagen ya existe, no se reconstruye
+            if aws ecr describe-images --repository-name "$repository" --image-ids imageTag="$IMAGE_TAG" > /dev/null 2>&1; then
+              echo "$image already exists, skipping"
+            else
+              docker build -t "$image" "$2"
+              docker push "$image"
+            fi
+          }
+          build api platform-engineer-problem-1-main
+          build web platform-engineer-problem-1-web
+
+      # --- Terraform del despliegue ---
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Format
+        working-directory: deploy
+        run: terraform fmt -check -recursive -diff
+
+      - name: Init
+        working-directory: deploy
+        run: terraform init -backend-config="backend/${ENVIRONMENT}.backend.hcl"
+
+      - name: Validate
+        working-directory: deploy
+        run: terraform validate
+
+      - name: Plan
+        working-directory: deploy
+        run: |
+          if [ "$ACTION" = "destroy" ]; then
+            terraform plan -destroy -var-file="environments/${ENVIRONMENT}.tfvars" -var="image_tag=${IMAGE_TAG}" -out=tfplan
+          else
+            terraform plan -var-file="environments/${ENVIRONMENT}.tfvars" -var="image_tag=${IMAGE_TAG}" -out=tfplan
+          fi
+
+      - name: Apply
+        working-directory: deploy
+        run: terraform apply tfplan
+
+      - name: Outputs
+        if: env.ACTION == 'deploy'
+        working-directory: deploy
+        run: |
+          {
+            echo "### Deployed \`${IMAGE_TAG}\`"
+            echo '```'
+            terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
